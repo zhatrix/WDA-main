@@ -142,7 +142,9 @@ docker exec cyborg-nginx nginx -s reload
 
 ### Apple Silicon (M 系列芯片) 特别说明
 
-`dwg2dxf`、`web-server`、`cad`、`core` 四个镜像均依赖 amd64 架构，在 M 系列芯片上构建时必须加 `--platform linux/amd64`。
+`web-server`、`cad`、`core` 镜像已支持 ARM64，在 M 系列芯片上可直接构建，无需 `--platform linux/amd64`。
+
+**仅 `dwg2dxf`** 依赖 ODA File Converter（仅提供 x86_64 二进制），必须继续使用 `--platform linux/amd64`（通过 Rosetta/QEMU 运行）。
 
 ---
 
@@ -160,7 +162,7 @@ docker tag cyborg/dwg2dxf:2.0 cyborg/dwg2dxf:latest
 
 ```bash
 cd /Users/zenyu/Workspace/WDA-main/web-server/docker
-docker build --platform linux/amd64 -f Dockerfile.local -t cyborg/webserver:3.0 .
+docker build -f Dockerfile.local -t cyborg/webserver:3.0 .
 docker tag cyborg/webserver:3.0 cyborg/webserver:latest
 ```
 
@@ -169,32 +171,32 @@ docker tag cyborg/webserver:3.0 cyborg/webserver:latest
 ```bash
 # 3a. 构建编译环境镜像
 cd /Users/zenyu/Workspace/WDA-main/cad/docker
-docker build --platform linux/amd64 -f Dockerfile.cn -t cyborg/cad:0.0 .
+docker build -f Dockerfile.local -t cyborg/cad:0.0 .
 
-# 3b. 编译 C++ 扩展（输出到 cad/build/lib.linux-x86_64-3.6/）
-docker run --rm --platform linux/amd64 \
+# 3b. 编译 C++ 扩展（输出到 cad/build/lib.<platform>-3.x/）
+docker run --rm \
   -v /Users/zenyu/Workspace/WDA-main/cad:/src \
   cyborg/cad:0.0 \
   /bin/bash -c "cd /src && rm -rf build && python3 setup.py build"
 ```
 
-验证：`cad/build/lib.linux-x86_64-3.6/cad_core.cpython-36m-x86_64-linux-gnu.so` 存在即成功。
+验证：`cad/build/` 下存在 `cad_core*.so` 即成功（路径因平台和 Python 版本而异）。
 
 ### 步骤 4：编译布局算法模块（layout.so）
 
 ```bash
 # 4a. 构建编译环境镜像（含 cmake）
 cd /Users/zenyu/Workspace/WDA-main/core/docker
-docker build --platform linux/amd64 -f Dockerfile.local -t cyborg/core:0.0 .
+docker build -f Dockerfile.local -t cyborg/core:0.0 .
 
 # 4b. 用 C++14 标准编译（输出到 core/）
-docker run --rm --platform linux/amd64 \
+docker run --rm \
   -v /Users/zenyu/Workspace/WDA-main/core:/src \
   cyborg/core:0.0 \
   /bin/bash -c "cd /src && rm -rf build && mkdir build && cd build && cmake -DCMAKE_CXX_STANDARD=14 .. && make"
 ```
 
-验证：`core/layout.cpython-36m-x86_64-linux-gnu.so` 存在即成功。
+验证：`core/` 下存在 `layout*.so` 即成功。
 
 > **注意**：必须用 `-DCMAKE_CXX_STANDARD=14`，C++11 下结构体默认成员初始化器语法不兼容。
 
@@ -227,13 +229,13 @@ bash run.sh nginx
 > 仅在代码更新后需要重建时执行。
 
 ```bash
-# 重建 dwg2dxf 镜像
+# 重建 dwg2dxf 镜像（仍需 amd64，ODA 二进制仅提供 x86_64）
 cd /Users/zenyu/Workspace/WDA-main/dwg2dxf/docker
 docker build --platform linux/amd64 -f Dockerfile.cn -t cyborg/dwg2dxf:2.0 .
 
-# 重建 web-server 镜像
+# 重建 web-server 镜像（ARM64 原生）
 cd /Users/zenyu/Workspace/WDA-main/web-server/docker
-docker build --platform linux/amd64 -f Dockerfile.local -t cyborg/webserver:3.0 .
+docker build -f Dockerfile.local -t cyborg/webserver:3.0 .
 
 # 重建后重启对应服务
 docker-compose -f /Users/zenyu/Workspace/WDA-main/web-server/docker/docker-compose.yml up -d --force-recreate
@@ -294,7 +296,7 @@ mkdir -p /Users/zenyu/Workspace/WDA-main/project/tmp/zip
 A: 通过 Docker Desktop GUI → Settings → Docker Engine 更新镜像源配置后点击 "Apply & Restart"。
 
 **Q: Apple Silicon 上构建失败（架构不兼容）**
-A: 所有 `docker build` 命令必须加 `--platform linux/amd64`。
+A: `web-server`、`cad`、`core` 已支持 ARM64，无需 `--platform`。仅 `dwg2dxf` 需要 `--platform linux/amd64`。
 
 **Q: `No module named 'cad_core'`**
 A: CAD C++ 扩展未编译。执行"步骤 3"重新编译。
